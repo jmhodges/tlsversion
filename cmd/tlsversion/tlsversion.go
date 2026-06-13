@@ -7,9 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -18,7 +20,7 @@ import (
 var (
 	httpsAddr = flag.String("httpsAddr", "localhost:10443", "address to boot the HTTPS server on")
 	httpAddr  = flag.String("httpAddr", "localhost:8080", "address to boot the HTTP server on")
-	rawVHost  = flag.String("vhost", "localhost:10443", "public domain to use in redirects and templates")
+	rawDomain = flag.String("canonicalDomain", "localhost:10443", "domain to use as base URL host when rendering redirects and templates (may include a port if necessary)")
 	certPath  = flag.String("cert", "./config/development_cert.pem", "file path to the TLS certificate to serve with")
 	keyPath   = flag.String("key", "./config/development_key.pem", "file path to the TLS key to serve with")
 	acmeURL   = flag.String("acmeRedirect", "", "URL to join with .well-known/acme paths and redirect to")
@@ -34,24 +36,34 @@ func main() {
 		log.Fatalf("failed to open cert file %s: %s", *certPath, err)
 	}
 	f.Close()
+
+	canonicalDomain := *rawDomain
+	domainForMatching := canonicalDomain
+	if strings.Contains(canonicalDomain, ":") {
+		domainForMatching, _, err = net.SplitHostPort(canonicalDomain)
+		if err != nil {
+			log.Fatalf("failed to split host and port in canonicalDomain %#v: %s", canonicalDomain, err)
+		}
+	}
+
 	protos := &http.Protocols{}
 	protos.SetHTTP2(true)
 	protos.SetHTTP1(true)
 	httpsSrv := &http.Server{
 		Addr:      *httpsAddr,
 		TLSConfig: tlsConf,
-		Handler:   encryptedMux(),
+		Handler:   encryptedMux(domainForMatching, canonicalDomain),
 		Protocols: protos,
 	}
 	plaintextSrv := &http.Server{
 		Addr:    *httpAddr,
-		Handler: plaintextMux(*rawVHost),
+		Handler: plaintextMux(canonicalDomain),
 	}
 
 	runServersWithGracefulShutdown(httpsSrv, plaintextSrv)
 }
 
-func encryptedMux() http.Handler {
+func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
 	mux.HandleFunc("/version.json", func(w http.ResponseWriter, r *http.Request) {
@@ -68,21 +80,44 @@ func encryptedMux() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "TLS Version: %s", tls.VersionName(r.TLS.Version))
 	})
-	out := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	expectTLS := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil {
+			// This is the mux for the HTTPS server, but we're not receiving TLS
+			// connection info, which means something was configured
+			// incorrectly.
 			http.Error(w, "brown paper bag bug", http.StatusInternalServerError)
 			return
 		}
 		mux.ServeHTTP(w, r)
 	})
-	return out
+
+	// domainRedirect redirects all requests to the canonical domain for this
+	// service. It has to work to make sure it handles ports in the domain flag
+	// value and in HTTP client headers correctly. net/http will strip ports
+	// from the Host header, so we can match against the domain and know we're
+	// getting the right request, even when using a localhost with port in
+	// development. Dropping ports is important because some clients include
+	// them in their `Host` header. See
+	// https://github.com/golang/go/issues/10463
+	domainRedirect := http.NewServeMux()
+	domainRedirect.HandleFunc(domainForMatching+"/", func(w http.ResponseWriter, r *http.Request) {
+		expectTLS.ServeHTTP(w, r)
+	})
+	domainRedirect.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		url := fmt.Sprintf("https://%s%s", canonicalDomain, r.URL.Path)
+		if r.URL.RawQuery != "" {
+			url += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, url, http.StatusMovedPermanently)
+	})
+	return domainRedirect
 }
 
 type tlsVersionResponse struct {
 	Version string `json:"version"`
 }
 
-func plaintextMux(vHost string) http.Handler {
+func plaintextMux(canonicalDomain string) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
 	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +126,7 @@ func plaintextMux(vHost string) http.Handler {
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		newURL := fmt.Sprintf("https://%s%s", vHost, r.URL.Path)
+		newURL := fmt.Sprintf("https://%s%s", canonicalDomain, r.URL.Path)
 		if r.URL.RawQuery != "" {
 			newURL += "?" + r.URL.RawQuery
 		}
