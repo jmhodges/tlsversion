@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -26,9 +28,6 @@ func main() {
 
 	tlsConf := makeTLSConfig(*certPath, *keyPath)
 
-	mux := http.NewServeMux()
-	plaintextMux := http.NewServeMux()
-
 	f, err := os.Open(*certPath)
 	if err != nil {
 		log.Fatalf("failed to open cert file %s: %s", *certPath, err)
@@ -40,15 +39,62 @@ func main() {
 	httpsSrv := &http.Server{
 		Addr:      *httpsAddr,
 		TLSConfig: tlsConf,
-		Handler:   mux,
+		Handler:   encryptedMux(),
 		Protocols: protos,
 	}
 	plaintextSrv := &http.Server{
 		Addr:    *httpAddr,
-		Handler: plaintextMux,
+		Handler: plaintextMux(*rawVHost),
 	}
 
 	runServersWithGracefulShutdown(httpsSrv, plaintextSrv)
+}
+
+func encryptedMux() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		out, err := json.Marshal(tlsVersionResponse{Version: tls.VersionName(r.TLS.Version)})
+		if err != nil {
+			http.Error(w, "unable to marshal TLS version response", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(out)
+	})
+	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "TLS Version: %s", tls.VersionName(r.TLS.Version))
+	})
+	out := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil {
+			http.Error(w, "brown paper bag bug", http.StatusInternalServerError)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+	return out
+}
+
+type tlsVersionResponse struct {
+	Version string `json:"version"`
+}
+
+func plaintextMux(vHost string) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		newURL := fmt.Sprintf("https://%s%s", vHost, r.URL.Path)
+		if r.URL.RawQuery != "" {
+			newURL += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, newURL, http.StatusMovedPermanently)
+	})
+	return mux
 }
 
 func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Server) {
