@@ -1,0 +1,22 @@
+.git
+.gitignore
+.claude
+# Local-testing certs only; never ship these.
+config
+Dockerfile
+.dockerignore
+README.md
+LICENSE
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+.env
