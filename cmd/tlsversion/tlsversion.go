@@ -21,7 +21,7 @@ var (
 	rawVHost  = flag.String("vhost", "localhost:10443", "public domain to use in redirects and templates")
 	certPath  = flag.String("cert", "./config/development_cert.pem", "file path to the TLS certificate to serve with")
 	keyPath   = flag.String("key", "./config/development_key.pem", "file path to the TLS key to serve with")
-	acmeURL   = flag.String("acmeRedirect", "/s/", "URL to join with .well-known/acme paths and redirect to")
+	acmeURL   = flag.String("acmeRedirect", "", "URL to join with .well-known/acme paths and redirect to")
 )
 
 func main() {
@@ -52,6 +52,7 @@ func main() {
 
 func encryptedMux() http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
 	mux.HandleFunc("/version.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		out, err := json.Marshal(tlsVersionResponse{Version: tls.VersionName(r.TLS.Version)})
@@ -82,6 +83,7 @@ type tlsVersionResponse struct {
 
 func plaintextMux(vHost string) http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
 	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -173,4 +175,30 @@ func makeTLSConfig(certPath, keyPath string) *tls.Config {
 		},
 	}
 	return tlsConf
+}
+
+// acmeRedirect is a string that represents the base URL (e.g.
+// "https://example.com") to redirect to for ACME challenges. The paths appended
+// to this base URL will include the `/.well-known/acme-challenge/` prefix. If
+// the base URL is empty, a 404 error will be returned. If the original path was
+// for "/.well-known/acme-challenge/" exactly, a 200 OK will be returned with an
+// empty body.
+type acmeRedirect string
+
+func (a acmeRedirect) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p := r.URL.Path
+	if string(a) == "" {
+		w.Header().Set("Content-Length", "0")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if p == "/.well-known/acme-challenge/" {
+		w.Header().Set("Content-Length", "0")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.URL.RawQuery != "" {
+		p += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, string(a)+p, http.StatusFound)
 }
