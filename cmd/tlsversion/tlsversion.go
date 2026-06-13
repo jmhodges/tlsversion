@@ -25,6 +25,7 @@ var (
 )
 
 func main() {
+	flag.Parse()
 
 	tlsConf := makeTLSConfig(*certPath, *keyPath)
 
