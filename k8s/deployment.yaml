@@ -48,7 +48,7 @@ spec:
             #   -canonicalDomain=$TLSVERSION_DOMAIN
             #   -acmeRedirect=$ACME_REDIRECT_URL
             - name: TLSVERSION_DOMAIN
-              value: tlsversion.com
+              value: www.tlsversion.com
             - name: ACME_REDIRECT_URL
               value: http://le.somethingsimilar.com/
           resources:
