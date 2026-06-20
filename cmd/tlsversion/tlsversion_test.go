@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -53,6 +54,96 @@ func TestAcmeRedirect(t *testing.T) {
 		want := "https://acme.example.com/.well-known/acme-challenge/token?x=1"
 		if got := rr.Header().Get("Location"); got != want {
 			t.Errorf("Location: got %q, want %q", got, want)
+		}
+	})
+}
+
+func TestValidateFlags(t *testing.T) {
+	// valid is a set of flag values that should pass validation. Each subtest
+	// mutates a copy to exercise one failure.
+	type flags struct {
+		httpsAddr, httpAddr, canonicalDomain, certPath, keyPath, acmeURL string
+	}
+	valid := flags{
+		httpsAddr:       ":10443",
+		httpAddr:        ":8080",
+		canonicalDomain: "www.tlsversion.com",
+		certPath:        "/secrets/tls.crt",
+		keyPath:         "/secrets/tls.key",
+		acmeURL:         "https://acme.example.com",
+	}
+	check := func(f flags) error {
+		return validateFlags(f.httpsAddr, f.httpAddr, f.canonicalDomain, f.certPath, f.keyPath, f.acmeURL)
+	}
+
+	t.Run("accepts valid flags", func(t *testing.T) {
+		if err := check(valid); err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("accepts an empty acmeRedirect", func(t *testing.T) {
+		f := valid
+		f.acmeURL = ""
+		if err := check(f); err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("accepts a root-relative acmeRedirect", func(t *testing.T) {
+		f := valid
+		f.acmeURL = "/s/"
+		if err := check(f); err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("accepts a canonicalDomain with a port", func(t *testing.T) {
+		f := valid
+		f.canonicalDomain = "localhost:10443"
+		if err := check(f); err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
+	})
+
+	cases := []struct {
+		name   string
+		mutate func(*flags)
+		want   string
+	}{
+		{"empty httpsAddr", func(f *flags) { f.httpsAddr = "" }, "-httpsAddr must not be empty"},
+		{"httpsAddr without port", func(f *flags) { f.httpsAddr = "localhost" }, "-httpsAddr"},
+		{"empty httpAddr", func(f *flags) { f.httpAddr = "" }, "-httpAddr must not be empty"},
+		{"httpAddr without port", func(f *flags) { f.httpAddr = "localhost" }, "-httpAddr"},
+		{"empty canonicalDomain", func(f *flags) { f.canonicalDomain = "" }, "-canonicalDomain must not be empty"},
+		{"malformed canonicalDomain", func(f *flags) { f.canonicalDomain = "host:port:extra" }, "-canonicalDomain"},
+		{"empty cert", func(f *flags) { f.certPath = "" }, "-cert must not be empty"},
+		{"empty key", func(f *flags) { f.keyPath = "" }, "-key must not be empty"},
+		{"bad acmeRedirect", func(f *flags) { f.acmeURL = "acme.example.com" }, "-acmeRedirect"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := valid
+			tc.mutate(&f)
+			err := check(f)
+			if err == nil {
+				t.Fatalf("expected an error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not mention %q", err, tc.want)
+			}
+		})
+	}
+
+	t.Run("reports every problem at once", func(t *testing.T) {
+		err := validateFlags("", "", "", "", "", "bad")
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		for _, want := range []string{"-httpsAddr", "-httpAddr", "-canonicalDomain", "-cert", "-key", "-acmeRedirect"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not mention %q", err, want)
+			}
 		}
 	})
 }
