@@ -1,36 +1,33 @@
 {{ define "title" }}About — tlsversion.com{{ end }}
 {{ define "content" -}}
 <h1>About</h1>
-<p>tlsversion.com reports one thing: the version of TLS your client negotiated
-to reach it. TLS is the protocol that encrypts traffic between your browser and
-the websites you visit. Open this site in a browser and the
-<a href="/">home page</a> shows the version your browser and this server agreed
-on. Point a script at the JSON endpoint and you get the same answer as data.</p>
-<p>It's a quick way to confirm what a given client actually does. Newer versions
-are faster and harder to attack. Most clients now negotiate <code>TLS 1.3</code>
-or <code>TLS 1.2</code>; the older <code>TLS 1.0</code> and <code>TLS 1.1</code>
-are deprecated and worth leaving behind.</p>
+<p>This site tells you which version of TLS your browser used to connect to it.
+Load the <a href="/">home page</a> and it shows you. If you want the answer as
+data instead, there's a JSON endpoint for that.</p>
+<p>TLS is what encrypts the connection between your browser and the websites you
+visit. The versions in use today are <code>TLS 1.3</code> and
+<code>TLS 1.2</code>. <code>TLS 1.0</code> and <code>TLS 1.1</code> are old and
+deprecated, and you don't want to still be on them.</p>
 
 <h2>The JSON API</h2>
-<p>For programmatic checks, fetch
-<a href="/v1/version.json"><code>/v1/version.json</code></a>:</p>
+<p>Request <a href="/v1/version.json"><code>/v1/version.json</code></a> and you
+get back the version:</p>
 <pre><code>$ curl https://tlsversion.com/v1/version.json
 {"version":"TLS 1.3"}</code></pre>
-<p>The response is a single object with a <code>version</code> field naming the
-TLS version of that request's connection. That's the whole API: one request, one
-field. It won't grow new shapes underneath you.</p>
+<p>One field, <code>version</code>. That's the whole response. I don't plan to
+add anything to it, so you can build against that shape and not worry about it
+changing.</p>
 
 <h2>Why not howsmyssl.com?</h2>
-<p>This endpoint replaces the TLS-version checks people were running against
-<a href="https://www.howsmyssl.com/a/check">howsmyssl.com's <code>/a/check</code>
-API</a>. That API returns a much larger report about a connection's security —
-its cipher suites, a rating, known weaknesses — and producing it is comparatively
-expensive. But the overwhelming majority of automated callers only ever read its
-<code>tls_version</code> field.</p>
-<p>tlsversion.com does just that one thing, so it's cheaper to run and cheaper to
-call, and it's the right tool when the negotiated TLS version is all you need. If
-you want the fuller security report, <a href="https://www.howsmyssl.com">howsmyssl.com</a>
-is still the place for it.</p>
+<p>I run <a href="https://www.howsmyssl.com">howsmyssl.com</a> too. Its
+<a href="https://www.howsmyssl.com/a/check"><code>/a/check</code></a> API hands
+back a big report about your connection: the cipher suites, a security rating,
+all of it. But plenty of people were calling it only to pull one field,
+<code>tls_version</code>, out of that report and ignore the rest. Producing the
+rest isn't free.</p>
+<p>So this is the small version of that. If the TLS version is all you're after,
+use this. If you want the full picture of a connection, howsmyssl.com is still
+there.</p>
 
 <p><a href="/">← Check my version</a></p>
 {{- end }}
