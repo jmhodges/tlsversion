@@ -15,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/jmhodges/tlsversion"
 )
 
 var (
@@ -77,8 +79,19 @@ func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 		w.Write(out)
 	})
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "TLS Version: %s", tls.VersionName(r.TLS.Version))
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		data := tlsversion.IndexData{Version: tls.VersionName(r.TLS.Version)}
+		if err := tlsversion.Index.Execute(w, data); err != nil {
+			http.Error(w, "unable to render index", http.StatusInternalServerError)
+			return
+		}
+	})
+	mux.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := tlsversion.About.Execute(w, nil); err != nil {
+			http.Error(w, "unable to render about", http.StatusInternalServerError)
+			return
+		}
 	})
 	expectTLS := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil {
