@@ -1,0 +1,47 @@
+name: Update dev environment certificates
+on:
+  schedule:
+    # Do this every 4 months. 3:01 AM on every 7th of the month was picked
+    # arbitrarily (c.f. fine-structure constant)
+    - cron: "1 3 7 */4 *"
+  # Allow a manual run from the Actions UI...
+  workflow_dispatch:
+  # ...or by pushing a throwaway branch.
+  push:
+    branches:
+      - force_update_dev_certs
+
+permissions:
+  contents: read
+
+jobs:
+  make_cert_pr:
+    runs-on: ubuntu-latest
+    # The App credentials live in this environment's secrets, so only this job
+    # can mint a token from them.
+    environment: cert-rotation
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go run ./cmd/gendevcerts -d ./config
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m')" >> "$GITHUB_OUTPUT"
+      - name: Generate a token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: "four month update of dev env certificates"
+          title: "four month update of dev environment certificates (for ${{ steps.date.outputs.date }})"
+          branch: auto_update_dev_certs
+          token: ${{ steps.app-token.outputs.token }}
