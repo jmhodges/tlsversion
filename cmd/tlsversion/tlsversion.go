@@ -33,15 +33,10 @@ func main() {
 
 	tlsConf := makeTLSConfig(*certPath, *keyPath)
 
-	f, err := os.Open(*certPath)
-	if err != nil {
-		log.Fatalf("failed to open cert file %s: %s", *certPath, err)
-	}
-	f.Close()
-
 	canonicalDomain := *rawDomain
 	domainForMatching := canonicalDomain
 	if strings.Contains(canonicalDomain, ":") {
+		var err error
 		domainForMatching, _, err = net.SplitHostPort(canonicalDomain)
 		if err != nil {
 			log.Fatalf("failed to split host and port in canonicalDomain %#v: %s", canonicalDomain, err)
