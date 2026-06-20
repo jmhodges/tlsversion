@@ -34,13 +34,9 @@ func main() {
 	tlsConf := makeTLSConfig(*certPath, *keyPath)
 
 	canonicalDomain := *rawDomain
-	domainForMatching := canonicalDomain
-	if strings.Contains(canonicalDomain, ":") {
-		var err error
-		domainForMatching, _, err = net.SplitHostPort(canonicalDomain)
-		if err != nil {
-			log.Fatalf("failed to split host and port in canonicalDomain %#v: %s", canonicalDomain, err)
-		}
+	domainForMatching, err := hostForMatching(canonicalDomain)
+	if err != nil {
+		log.Fatalf("failed to split host and port in canonicalDomain %#v: %s", canonicalDomain, err)
 	}
 
 	protos := &http.Protocols{}
@@ -58,6 +54,21 @@ func main() {
 	}
 
 	runServersWithGracefulShutdown(httpsSrv, plaintextSrv)
+}
+
+// hostForMatching returns the bare host (no port) from a canonical domain value
+// that may include a port, e.g. "localhost:10443" in development. net/http
+// strips the port from request Host headers, so the ServeMux host pattern must
+// be portless to match. A value without a port is returned unchanged.
+func hostForMatching(canonicalDomain string) (string, error) {
+	if !strings.Contains(canonicalDomain, ":") {
+		return canonicalDomain, nil
+	}
+	host, _, err := net.SplitHostPort(canonicalDomain)
+	if err != nil {
+		return "", err
+	}
+	return host, nil
 }
 
 func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
