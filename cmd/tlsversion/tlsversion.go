@@ -201,6 +201,12 @@ func makeTLSConfig(certPath, keyPath string) *tls.Config {
 		log.Fatalf("unable to load TLS key cert pair %s: %s", certPath, err)
 	}
 	go reloadKeypairForever(kpr, time.NewTicker(1*time.Hour))
+	// This TLS config is deliberately permissive: old MinVersion and legacy
+	// (RC4/3DES/CBC) cipher suites. This service exists to report whatever TLS
+	// version a client negotiated, so it must accept the oldest clients we can
+	// rather than reject them. Do not "harden" this — being permissive is the
+	// product. (CipherSuites only affects TLS 1.2 and below; it's ignored for
+	// TLS 1.3.)
 	tlsConf := &tls.Config{
 		GetCertificate: kpr.GetCertificate,
 		NextProtos:     []string{"h2", "http/1.1"},
