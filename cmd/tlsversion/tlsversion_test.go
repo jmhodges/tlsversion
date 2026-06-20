@@ -57,6 +57,34 @@ func TestAcmeRedirect(t *testing.T) {
 	})
 }
 
+func TestHostForMatching(t *testing.T) {
+	t.Run("strips the port", func(t *testing.T) {
+		got, err := hostForMatching("localhost:10443")
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if got != "localhost" {
+			t.Errorf("host: got %q, want %q", got, "localhost")
+		}
+	})
+
+	t.Run("passes a portless host through unchanged", func(t *testing.T) {
+		got, err := hostForMatching("www.tlsversion.com")
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if got != "www.tlsversion.com" {
+			t.Errorf("host: got %q, want %q", got, "www.tlsversion.com")
+		}
+	})
+
+	t.Run("errors on a malformed host:port", func(t *testing.T) {
+		if _, err := hostForMatching("host:port:extra"); err == nil {
+			t.Error("expected an error, got nil")
+		}
+	})
+}
+
 func TestPlaintextMux(t *testing.T) {
 	h := plaintextMux("example.com")
 
@@ -127,6 +155,9 @@ func TestEncryptedMux(t *testing.T) {
 		}
 		if got := rr.Header().Get("Content-Type"); got != "application/json" {
 			t.Errorf("Content-Type: got %q, want %q", got, "application/json")
+		}
+		if want := "max-age=63072000; includeSubDomains"; rr.Header().Get("Strict-Transport-Security") != want {
+			t.Errorf("Strict-Transport-Security: got %q, want %q", rr.Header().Get("Strict-Transport-Security"), want)
 		}
 
 		body, err := io.ReadAll(rr.Body)
