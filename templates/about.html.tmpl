@@ -14,12 +14,13 @@ deprecated, and you don't want to still be on them.</p>
 get back the version:</p>
 <pre><code>$ curl https://tlsversion.com/v1/version.json
 {"version":"TLS 1.3"}</code></pre>
-<p>One field, <code>version</code>. That's the whole response. I don't plan to
-add anything to it, so you can build against that shape and not worry about it
-changing.</p>
+<p>One field, <code>version</code>. That's the whole response, and it's meant to
+stay that way, so you can build against that shape without worrying it'll
+change.</p>
 
 <h2>Why not howsmyssl.com?</h2>
-<p>I run <a href="https://www.howsmyssl.com">howsmyssl.com</a> too. Its
+<p>This site comes from the same person who runs
+<a href="https://www.howsmyssl.com">howsmyssl.com</a>. Its
 <a href="https://www.howsmyssl.com/a/check"><code>/a/check</code></a> API hands
 back a big report about your connection: the cipher suites, a security rating,
 all of it. But plenty of people were calling it only to pull one field,
