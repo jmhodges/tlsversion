@@ -101,6 +101,7 @@ func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 			http.Error(w, "brown paper bag bug", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		mux.ServeHTTP(w, r)
 	})
 
