@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ block "title" . }}tlsversion.com{{ end }}</title>
+<style>
+:root {
+  --paper: #fdfbf6;
+  --ink: #221e18;
+  --muted: #645d51;
+  --rule: #e4ddcd;
+  --link: #8a3324;
+
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --measure: 34rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1a1712;
+    --ink: #ece3d3;
+    --muted: #b9af9c;
+    --rule: #352f27;
+    --link: #e08a6f;
+  }
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 1.25rem/1.65 var(--serif);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+main {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 4rem 1.5rem 1.5rem;
+}
+
+main > * + * { margin-top: 1.2rem; }
+
+a {
+  color: var(--link);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+a:hover { text-decoration: none; }
+
+/* The home page's framing line: "Your connection negotiated" */
+.kicker {
+  margin: 0;
+  font-size: 1.05rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* The TLS version itself, set as display type rather than boxed. */
+.version {
+  margin: 0;
+  font-size: 3.4rem;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  font-feature-settings: "lnum" 1;
+}
+
+.note { color: var(--muted); }
+
+h1 {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 600;
+}
+
+code {
+  font: 0.85em var(--mono);
+  background: var(--rule);
+  background: color-mix(in srgb, var(--rule) 55%, transparent);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+}
+
+footer {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 1.2rem 1.5rem 2.5rem;
+  border-top: 1px solid var(--rule);
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+
+footer a { color: var(--muted); }
+footer a:hover { color: var(--link); }
+</style>
+</head>
+<body>
+<main>
+{{ block "content" . }}{{ end }}
+</main>
+<footer>
+<a href="/">Home</a> &middot;
+<a href="/about">About</a> &middot;
+<a href="/v1/version.json">JSON API</a> &middot;
+<a href="https://github.com/jmhodges/tlsversion">Source</a>
+</footer>
+</body>
+</html>
