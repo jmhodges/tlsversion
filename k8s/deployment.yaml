@@ -55,6 +55,12 @@ spec:
             requests:
               cpu: 50m
               memory: 32Mi
+            limits:
+              # No CPU limit on purpose: the 50m request already guarantees
+              # fair scheduling, and a CPU limit would invite CFS throttling on
+              # the latency-sensitive redirect path. The memory limit caps this
+              # container so a leak OOM-kills it rather than starving neighbors.
+              memory: 64Mi
           # `/healthcheck` is served by the plaintext mux on the http port, so
           # probes don't need to deal with the self-signed-at-rest TLS cert.
           readinessProbe:
