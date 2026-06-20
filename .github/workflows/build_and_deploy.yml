@@ -43,6 +43,15 @@ jobs:
     concurrency: production
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Need the parent commit so we can use its already-built image as a
+          # buildx --cache-from source (see the build-push step below).
+          fetch-depth: 2
+
+      - uses: docker/setup-buildx-action@v3
+      # Exposes ACTIONS_RUNTIME_TOKEN / cache URL to later steps so the raw
+      # `docker buildx build` below can read and write the type=gha cache.
+      - uses: crazy-max/ghaction-github-runtime@v3
 
       - id: auth
         uses: google-github-actions/auth@v3.0.0
@@ -70,10 +79,26 @@ jobs:
                 --format='value(image_summary.fully_qualified_digest)' 2>/dev/null); then
             echo "Reusing existing image $DIGEST"
           else
-            docker build -t "$TAG" .
-            docker push "$TAG"
-            # Pin the deploy to the immutable digest rather than the mutable tag.
-            DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$TAG")
+            # Cache sources: the parent commit's image (carries an inline cache,
+            # so its layers -- notably the apt-get install -- are reused without
+            # re-running) plus the GitHub Actions cache (covers the Go build
+            # stage, which inline cache can't). The repo has immutable tags, so
+            # we deliberately avoid a moving :buildcache tag / registry mode=max:
+            # each v1-<sha> tag is unique, and type=inline rides inside it.
+            PARENT_SHA=$(git rev-parse HEAD^ 2>/dev/null || true)
+            docker buildx build \
+              ${PARENT_SHA:+--cache-from "type=registry,ref=$REPO:v1-$PARENT_SHA"} \
+              --cache-from type=gha \
+              --cache-to type=gha,mode=max \
+              --cache-to type=inline \
+              -t "$TAG" \
+              --metadata-file meta.json \
+              --push \
+              .
+            # buildx --push doesn't load the image locally, so read the pushed
+            # digest from the build metadata. Pin the deploy to that immutable
+            # digest rather than the mutable tag.
+            DIGEST="$REPO@$(jq -r '."containerimage.digest"' meta.json)"
             echo "Built $DIGEST"
           fi
           echo "image=$DIGEST" >> "$GITHUB_OUTPUT"

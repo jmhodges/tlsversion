@@ -12,20 +12,26 @@ RUN go mod download
 
 COPY . .
 
-# Build a fully static binary so it runs on a minimal base.
-RUN CGO_ENABLED=0 GOOS=linux go build \
+# cgo defaults to enabled (the golang image ships a C compiler), so we leave
+# CGO_ENABLED unset. This links dynamically against glibc, so the runtime base
+# below must provide a compatible (>=) glibc; the build and runtime stages are
+# both Debian trixie to keep those glibc versions matched.
+RUN GOOS=linux go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /out/tlsversion \
     ./cmd/tlsversion
 
 # ---- Runtime stage ----
-# Alpine (rather than distroless static) so the shell can expand the
-# environment variables passed to the command below.
-FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+# Debian trixie (slim) rather than alpine: it provides the glibc the cgo binary
+# is linked against, and it keeps a shell so the command below can expand the
+# environment variables passed to it. Matches the build stage's Debian release.
+FROM debian:trixie-slim@sha256:4e401d95de7083948053197a9c3913343cd06b706bf15eb6a0c3ccd26f436a0e
 
-RUN apk add --no-cache ca-certificates \
-    && adduser -D -u 10001 app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin app
 
 COPY --from=build /out/tlsversion /usr/local/bin/tlsversion
 
