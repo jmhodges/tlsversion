@@ -52,11 +52,20 @@ jobs:
       - id: build-push
         run: |
           REPO=us-central1-docker.pkg.dev/personal-sites-1295/deploys/tlsversion
-          docker build -t "$REPO:v1-${GITHUB_SHA}" .
-          docker push "$REPO:v1-${GITHUB_SHA}"
-          # Pin the deploy to the immutable digest rather than the mutable tag.
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$REPO:v1-${GITHUB_SHA}")
-          echo "Built $DIGEST"
+          TAG="$REPO:v1-${GITHUB_SHA}"
+          # On a re-run the tag already exists, and the repo has tag immutability
+          # enabled, so re-pushing it would fail. Reuse the existing digest
+          # instead of rebuilding.
+          if DIGEST=$(gcloud artifacts docker images describe "$TAG" \
+                --format='value(image_summary.fully_qualified_digest)' 2>/dev/null); then
+            echo "Reusing existing image $DIGEST"
+          else
+            docker build -t "$TAG" .
+            docker push "$TAG"
+            # Pin the deploy to the immutable digest rather than the mutable tag.
+            DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$TAG")
+            echo "Built $DIGEST"
+          fi
           echo "image=$DIGEST" >> "$GITHUB_OUTPUT"
 
       - id: deploy
