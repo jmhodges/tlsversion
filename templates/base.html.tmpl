@@ -83,12 +83,40 @@ h1 {
   font-weight: 600;
 }
 
+/* Section headings on the about page. Set a little above the body and given
+   extra breathing room so the page reads as distinct sections. */
+h2 {
+  margin: 0;
+  padding-top: 0.6rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
 code {
   font: 0.85em var(--mono);
   background: var(--rule);
   background: color-mix(in srgb, var(--rule) 55%, transparent);
   padding: 0.05em 0.3em;
   border-radius: 3px;
+}
+
+pre {
+  margin: 0;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--rule) 55%, transparent);
+  padding: 0.9rem 1rem;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Code inside a pre block carries the block's own background, so strip the
+   inline-code chrome and let it fill the line. */
+pre code {
+  font-size: 0.85rem;
+  background: none;
+  padding: 0;
+  border-radius: 0;
 }
 
 footer {

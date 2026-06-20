@@ -35,7 +35,11 @@ func TestAboutRender(t *testing.T) {
 		"<!DOCTYPE html>",
 		`<title>About — tlsversion.com</title>`,
 		"<h1>About</h1>",
-		`href="/"`, // link back home
+		`href="/"`,                 // link back home
+		"<h2>The JSON API</h2>",    // JSON API in its own section
+		`href="/v1/version.json"`,  // points at the JSON endpoint
+		"howsmyssl.com",            // explains the replacement
+		"<code>tls_version</code>", // the howsmyssl field people actually read
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("about output missing %q\n---\n%s", want, out)

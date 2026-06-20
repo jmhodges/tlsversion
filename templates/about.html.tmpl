@@ -1,13 +1,36 @@
 {{ define "title" }}About — tlsversion.com{{ end }}
 {{ define "content" -}}
 <h1>About</h1>
-<p>This site reports the TLS version your client used to reach it. TLS is the
-protocol that encrypts traffic between your browser and the websites you visit.</p>
-<p>Newer versions are faster and harder to attack. Most browsers now negotiate
-<code>TLS 1.3</code> or <code>TLS 1.2</code>; the older <code>TLS 1.0</code> and
-<code>TLS 1.1</code> are deprecated and worth leaving behind.</p>
-<p>The home page shows whatever version your browser and this server settled on
-for that request. If you'd rather have it as data, fetch
-<a href="/v1/version.json"><code>/v1/version.json</code></a>.</p>
+<p>tlsversion.com reports one thing: the version of TLS your client negotiated
+to reach it. TLS is the protocol that encrypts traffic between your browser and
+the websites you visit. Open this site in a browser and the
+<a href="/">home page</a> shows the version your browser and this server agreed
+on. Point a script at the JSON endpoint and you get the same answer as data.</p>
+<p>It's a quick way to confirm what a given client actually does. Newer versions
+are faster and harder to attack. Most clients now negotiate <code>TLS 1.3</code>
+or <code>TLS 1.2</code>; the older <code>TLS 1.0</code> and <code>TLS 1.1</code>
+are deprecated and worth leaving behind.</p>
+
+<h2>The JSON API</h2>
+<p>For programmatic checks, fetch
+<a href="/v1/version.json"><code>/v1/version.json</code></a>:</p>
+<pre><code>$ curl https://tlsversion.com/v1/version.json
+{"version":"TLS 1.3"}</code></pre>
+<p>The response is a single object with a <code>version</code> field naming the
+TLS version of that request's connection. That's the whole API: one request, one
+field. It won't grow new shapes underneath you.</p>
+
+<h2>Why not howsmyssl.com?</h2>
+<p>This endpoint replaces the TLS-version checks people were running against
+<a href="https://www.howsmyssl.com/a/check">howsmyssl.com's <code>/a/check</code>
+API</a>. That API returns a much larger report about a connection's security —
+its cipher suites, a rating, known weaknesses — and producing it is comparatively
+expensive. But the overwhelming majority of automated callers only ever read its
+<code>tls_version</code> field.</p>
+<p>tlsversion.com does just that one thing, so it's cheaper to run and cheaper to
+call, and it's the right tool when the negotiated TLS version is all you need. If
+you want the fuller security report, <a href="https://www.howsmyssl.com">howsmyssl.com</a>
+is still the place for it.</p>
+
 <p><a href="/">← Check my version</a></p>
 {{- end }}
