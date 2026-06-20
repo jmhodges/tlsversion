@@ -5,7 +5,14 @@
 # field below is reconciled on every deploy to main. There is no manual
 # `kubectl edit` drift to worry about.
 #
-# To apply by hand (e.g. for a config change you want to test before merging):
+# BOOTSTRAP: the tlsversion-deploy service account CI uses can only *patch*
+# these objects, not create them (its RBAC role in founding's terraform grants
+# update/patch/delete, not create -- create can't be scoped to named objects).
+# So each resource here must be created once by hand with an admin identity
+# before CI can manage it. Same goes for any *new* resource kind added later:
+# apply it once yourself, then CI takes over. Use the command below to bootstrap.
+#
+# To apply by hand (bootstrap, or a config change you want to test pre-merge):
 #   IMAGE=us-central1-docker.pkg.dev/personal-sites-1295/deploys/tlsversion:latest
 #   sed "s|__IMAGE__|$IMAGE|g" k8s/deployment.yaml | kubectl apply -f -
 ---
