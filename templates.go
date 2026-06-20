@@ -8,11 +8,13 @@ import (
 //go:embed templates/*.html.tmpl
 var templateFS embed.FS
 
-// Index renders the index page. It expects data with a Version field.
-var Index = template.Must(template.ParseFS(templateFS, "templates/index.html.tmpl"))
+// Index renders the index page. It expects data with a Version field. The base
+// layout is listed first so Execute renders it and the page supplies the
+// "title" and "content" blocks.
+var Index = template.Must(template.ParseFS(templateFS, "templates/base.html.tmpl", "templates/index.html.tmpl"))
 
 // About renders the about page.
-var About = template.Must(template.ParseFS(templateFS, "templates/about.html.tmpl"))
+var About = template.Must(template.ParseFS(templateFS, "templates/base.html.tmpl", "templates/about.html.tmpl"))
 
 // IndexData is the data passed to the Index template.
 type IndexData struct {

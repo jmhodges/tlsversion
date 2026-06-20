@@ -1,10 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>TLS Version</title>
-</head>
-<body>
-<h1>{{ .Version }}</h1>
-</body>
-</html>
+{{ define "title" }}{{ .Version }} — tlsversion.com{{ end }}
+{{ define "content" -}}
+<p class="kicker">Your connection negotiated</p>
+<p class="version">{{ .Version }}</p>
+<p class="note">That's the protocol your browser and this server agreed on to encrypt the page you're reading. <a href="/about">What does that mean?</a></p>
+{{- end }}
