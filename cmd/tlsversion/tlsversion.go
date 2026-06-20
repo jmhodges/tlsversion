@@ -31,6 +31,10 @@ var (
 func main() {
 	flag.Parse()
 
+	if err := validateFlags(*httpsAddr, *httpAddr, *rawDomain, *certPath, *keyPath, *acmeURL); err != nil {
+		log.Fatal(err)
+	}
+
 	tlsConf := makeTLSConfig(*certPath, *keyPath)
 
 	canonicalDomain := *rawDomain
@@ -54,6 +58,61 @@ func main() {
 	}
 
 	runServersWithGracefulShutdown(httpsSrv, plaintextSrv)
+}
+
+// validateFlags checks the command-line flag values for problems that would
+// stop the servers from booting correctly, or that would boot a misconfigured
+// service. It reports every problem it finds in one error (rather than failing
+// on the first) so the operator can fix them all in a single pass instead of
+// rebooting repeatedly to discover them one at a time.
+func validateFlags(httpsAddr, httpAddr, canonicalDomain, certPath, keyPath, acmeURL string) error {
+	var problems []string
+
+	for _, f := range []struct {
+		name, value string
+	}{
+		{"httpsAddr", httpsAddr},
+		{"httpAddr", httpAddr},
+	} {
+		if f.value == "" {
+			problems = append(problems, fmt.Sprintf("-%s must not be empty", f.name))
+			continue
+		}
+		// net/http and net.Listen want a host:port address (the host may be
+		// empty, e.g. ":10443"). SplitHostPort rejects values with no port,
+		// which would otherwise fail only once a server tried to listen.
+		if _, _, err := net.SplitHostPort(f.value); err != nil {
+			problems = append(problems, fmt.Sprintf("-%s %#v is not a valid host:port address: %s", f.name, f.value, err))
+		}
+	}
+
+	if canonicalDomain == "" {
+		problems = append(problems, "-canonicalDomain must not be empty")
+	} else if _, err := hostForMatching(canonicalDomain); err != nil {
+		problems = append(problems, fmt.Sprintf("-canonicalDomain %#v could not be parsed: %s", canonicalDomain, err))
+	}
+
+	if certPath == "" {
+		problems = append(problems, "-cert must not be empty")
+	}
+	if keyPath == "" {
+		problems = append(problems, "-key must not be empty")
+	}
+
+	// acmeRedirect is optional. When set it is joined with request paths to
+	// build a redirect target, so it must be an absolute URL or a root-relative
+	// path. Anything else would produce broken redirects.
+	if acmeURL != "" &&
+		!strings.HasPrefix(acmeURL, "/") &&
+		!strings.HasPrefix(acmeURL, "https://") &&
+		!strings.HasPrefix(acmeURL, "http://") {
+		problems = append(problems, fmt.Sprintf("-acmeRedirect must start with 'http://', 'https://', or '/' but does not: %#v", acmeURL))
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf("invalid flag values:\n  %s", strings.Join(problems, "\n  "))
+	}
+	return nil
 }
 
 // hostForMatching returns the bare host (no port) from a canonical domain value
