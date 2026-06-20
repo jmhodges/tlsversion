@@ -14,9 +14,9 @@ func TestIndexRender(t *testing.T) {
 
 	for _, want := range []string{
 		"<!DOCTYPE html>",
-		"TLS 1.3", // version content from the page block
+		"TLS 1.3",                       // version content from the page block
 		`<title>tlsversion.com</title>`, // title omits the negotiated version
-		`href="/about"`, // link to the about page
+		`href="/about"`,                 // link to the about page
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("index output missing %q\n---\n%s", want, out)
