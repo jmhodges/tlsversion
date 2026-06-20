@@ -68,7 +68,7 @@ func main() {
 func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
-	mux.HandleFunc("/version.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/version.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		out, err := json.Marshal(tlsVersionResponse{Version: tls.VersionName(r.TLS.Version)})
 		if err != nil {
