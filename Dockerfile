@@ -12,7 +12,7 @@ RUN go mod download
 
 COPY . .
 
-RUN GOOS=linux go build \
+RUN go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /out/tlsversion \
