@@ -1,8 +1,11 @@
 .git
 .gitignore
+.github
 .claude
 # Local-testing certs only; never ship these.
 config
+# Deploy manifests and CI config don't affect the build.
+k8s
 Dockerfile
 .dockerignore
 README.md
