@@ -12,20 +12,19 @@ RUN go mod download
 
 COPY . .
 
-# Build a fully static binary so it runs on a minimal base.
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN GOOS=linux go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /out/tlsversion \
     ./cmd/tlsversion
 
 # ---- Runtime stage ----
-# Alpine (rather than distroless static) so the shell can expand the
-# environment variables passed to the command below.
-FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+# Debian 13 slim with ca-certificates already baked in (rather than distroless
+# static) so the shell can expand the environment variables passed to the
+# command below.
+FROM cacertsfriend/ca-certs-images:debian-13-slim@sha256:502c35c01ac42b442156ce8a99db95801bd57ca5d8d9e43e5404f080c6dc0247
 
-RUN apk add --no-cache ca-certificates \
-    && adduser -D -u 10001 app
+RUN useradd --uid 10001 --no-create-home app
 
 COPY --from=build /out/tlsversion /usr/local/bin/tlsversion
 
