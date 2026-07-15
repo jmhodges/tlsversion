@@ -100,10 +100,11 @@ metadata:
     app: tlsversion
 spec:
   # The pod terminates TLS itself on 10443 and redirects :8080 -> https, so the
-  # LoadBalancer passes both ports straight through. Point the tlsversion.com
-  # DNS A record at this Service's external IP. To pin a reserved static IP,
-  # set `loadBalancerIP:` here (or the GKE static-IP annotation).
+  # LoadBalancer passes both ports straight through. The tlsversion.com DNS A
+  # record points at this IP, which is reserved as the static address
+  # `tlsversion-lb` in us-central1.
   type: LoadBalancer
+  loadBalancerIP: 34.42.103.207
   selector:
     app: tlsversion
   ports:
