@@ -277,6 +277,30 @@ func TestEncryptedMux(t *testing.T) {
 		}
 	})
 
+	t.Run("json endpoint allows cross-origin reads", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "https://example.com/v1/version.json", nil)
+		req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+		h.ServeHTTP(rr, req)
+
+		if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+			t.Errorf("Access-Control-Allow-Origin: got %q, want %q", got, "*")
+		}
+	})
+
+	t.Run("html pages do not allow cross-origin reads", func(t *testing.T) {
+		for _, path := range []string{"/", "/about"} {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "https://example.com"+path, nil)
+			req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+			h.ServeHTTP(rr, req)
+
+			if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+				t.Errorf("%s Access-Control-Allow-Origin: got %q, want empty", path, got)
+			}
+		}
+	})
+
 	t.Run("no Alt-Svc header without the withAltSvc wrapper", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "https://example.com/", nil)
