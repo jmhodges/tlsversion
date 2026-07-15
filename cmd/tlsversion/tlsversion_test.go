@@ -235,6 +235,31 @@ func TestEncryptedMux(t *testing.T) {
 		}
 	})
 
+	t.Run("index page sets nosniff", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "https://example.com/", nil)
+		req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+		h.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("status: got %d, want %d", rr.Code, http.StatusOK)
+		}
+		if got := rr.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("X-Content-Type-Options: got %q, want %q", got, "nosniff")
+		}
+	})
+
+	t.Run("json endpoint sets nosniff", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "https://example.com/v1/version.json", nil)
+		req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+		h.ServeHTTP(rr, req)
+
+		if got := rr.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("X-Content-Type-Options: got %q, want %q", got, "nosniff")
+		}
+	})
+
 	t.Run("v1/version.json reports the negotiated TLS version", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "https://example.com/v1/version.json", nil)

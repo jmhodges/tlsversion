@@ -167,6 +167,10 @@ func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 			return
 		}
 		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		// nosniff applies to every response the HTTPS server serves (HTML and
+		// the JSON API alike): it stops browsers from MIME-sniffing a response
+		// into a type we didn't intend.
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		mux.ServeHTTP(w, r)
 	})
 
