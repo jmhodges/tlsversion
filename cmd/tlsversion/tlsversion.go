@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -57,7 +58,11 @@ func main() {
 		Handler: plaintextMux(canonicalDomain),
 	}
 
-	runServersWithGracefulShutdown(httpsSrv, plaintextSrv)
+	if err := runServersWithGracefulShutdown(httpsSrv, plaintextSrv); err != nil {
+		// The failures were already logged as they happened; the non-zero
+		// exit is the signal to the process supervisor.
+		os.Exit(1)
+	}
 }
 
 // validateFlags checks the command-line flag values for problems that would
@@ -214,69 +219,93 @@ func plaintextMux(canonicalDomain string) http.Handler {
 	return mux
 }
 
-func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Server) {
+// runServersWithGracefulShutdown runs both servers until an OS signal arrives
+// or a listener fails, then drains in-flight requests on both before
+// returning. Listener errors are logged as they are seen; the returned error
+// is non-nil if any server failed, so main can exit non-zero for the process
+// supervisor.
+func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Server) error {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// serveErr carries a fatal listener error (e.g. the port is already in
-	// use) from either goroutine. It is buffered for both senders so a losing
-	// sender never blocks forever after the winner triggers shutdown.
-	serveErr := make(chan error, 2)
-
-	log.Printf("Booting HTTPS on %s and HTTP on %s", *httpsAddr, *httpAddr)
-	go func() {
+	servers := []struct {
+		name   string
+		srv    *http.Server
+		listen func() error
+	}{
 		// Empty paths: certs come from TLSConfig's GetCertificate (the keypair
 		// reloader). Passing file paths here would make ServeTLS load a static
 		// copy into Certificates[0], which clients without SNI would then be
 		// served forever, never seeing reloaded certs.
-		err := httpsSrv.ListenAndServeTLS("", "")
-		if err != nil && err != http.ErrServerClosed {
-			serveErr <- fmt.Errorf("https server error: %w", err)
-		}
-	}()
-	go func() {
-		err := plaintextSrv.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
-			serveErr <- fmt.Errorf("http server error: %w", err)
-		}
-	}()
+		{"https", httpsSrv, func() error { return httpsSrv.ListenAndServeTLS("", "") }},
+		{"http", plaintextSrv, func() error { return plaintextSrv.ListenAndServe() }},
+	}
+
+	// serveErr carries fatal listener errors (e.g. the port is already in
+	// use). It is buffered for every sender so no sender blocks after the
+	// first error triggers shutdown.
+	serveErr := make(chan error, len(servers))
+
+	log.Printf("Booting HTTPS on %s and HTTP on %s", *httpsAddr, *httpAddr)
+	var serveWG sync.WaitGroup
+	for _, s := range servers {
+		serveWG.Go(func() {
+			err := s.listen()
+			if err != nil && err != http.ErrServerClosed {
+				serveErr <- fmt.Errorf("%s server error: %w", s.name, err)
+			}
+		})
+	}
 
 	// Wait for either an operator-initiated stop (a signal) or a fatal
-	// listener error. A listener error must still drain the other server
-	// gracefully rather than calling log.Fatal (os.Exit), which would leave
-	// the healthy server's in-flight requests dropped mid-response.
-	var listenErr error
+	// listener error. Either way both servers get the graceful drain below,
+	// so a listener error doesn't drop the healthy server's in-flight
+	// requests mid-response.
+	var listenErrs []error
 	select {
 	case <-stop:
-	case listenErr = <-serveErr:
-		log.Printf("shutting down after %s", listenErr)
+	case err := <-serveErr:
+		log.Printf("shutting down after %s", err)
+		listenErrs = append(listenErrs, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		err := httpsSrv.Shutdown(ctx)
-		if err != nil {
-			log.Printf("error shutting down HTTPS: %s", err)
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		err := plaintextSrv.Shutdown(ctx)
-		if err != nil {
-			log.Printf("error shutting down HTTP: %s", err)
-		}
-	}()
-	wg.Wait()
-	cancel()
+	defer cancel()
 
-	// Preserve the original failure signal to the process supervisor: a crash
-	// from a listener error should still exit non-zero, but only after both
-	// servers have drained.
-	if listenErr != nil {
-		os.Exit(1)
+	// A signal during the drain (including a second signal after the one
+	// that started it) abandons the drain so an operator or supervisor can
+	// always force a prompt exit instead of waiting out the full timeout.
+	go func() {
+		<-stop
+		log.Printf("signal received during drain, shutting down immediately")
+		cancel()
+	}()
+
+	var wg sync.WaitGroup
+	for _, s := range servers {
+		wg.Go(func() {
+			if err := s.srv.Shutdown(ctx); err != nil {
+				log.Printf("error shutting down %s: %s", strings.ToUpper(s.name), err)
+			}
+		})
+	}
+	wg.Wait()
+
+	// Sweep up any listener errors not seen by the select above: the second
+	// failure when both servers die, or one that raced (or arrived after) a
+	// signal. Without this they would go unlogged and the process would exit
+	// 0 despite a crashed server. Shutdown has closed the listeners, so the
+	// serve goroutines are done or about to be — wait for them so every
+	// error has been sent before we drain.
+	serveWG.Wait()
+	for {
+		select {
+		case err := <-serveErr:
+			log.Printf("server error during shutdown: %s", err)
+			listenErrs = append(listenErrs, err)
+		default:
+			return errors.Join(listenErrs...)
+		}
 	}
 }
 
