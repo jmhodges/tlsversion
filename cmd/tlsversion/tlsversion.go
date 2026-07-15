@@ -220,7 +220,11 @@ func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Se
 
 	log.Printf("Booting HTTPS on %s and HTTP on %s", *httpsAddr, *httpAddr)
 	go func() {
-		err := httpsSrv.ListenAndServeTLS(*certPath, *keyPath)
+		// Empty paths: certs come from TLSConfig's GetCertificate (the keypair
+		// reloader). Passing file paths here would make ServeTLS load a static
+		// copy into Certificates[0], which clients without SNI would then be
+		// served forever, never seeing reloaded certs.
+		err := httpsSrv.ListenAndServeTLS("", "")
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("https server error: %s", err)
 		}
