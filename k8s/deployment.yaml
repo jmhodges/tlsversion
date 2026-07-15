@@ -114,6 +114,11 @@ spec:
     - name: http
       port: 80
       targetPort: http
+    # HTTP/3 (QUIC): UDP 443 to the pods' HTTP/3 listener.
+    - name: http3
+      port: 443
+      protocol: UDP
+      targetPort: http3
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
