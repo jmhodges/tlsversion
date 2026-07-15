@@ -258,6 +258,12 @@ func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
 	mux.HandleFunc("/v1/version.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		// The TLS version is a property of the caller's own connection, so
+		// there's nothing here that's private to the origin. Let anyone fetch
+		// it from a page on any site: howsmyssl's JSON API is wide open like
+		// this, and we want its users to be able to move over here without
+		// changing anything but the URL.
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		out, err := json.Marshal(tlsVersionResponse{Version: tls.VersionName(r.TLS.Version)})
 		if err != nil {
 			http.Error(w, "unable to marshal TLS version response", http.StatusInternalServerError)
