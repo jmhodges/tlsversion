@@ -14,14 +14,15 @@
 
 <p>This site reports the TLS version your client used to reach it. TLS is the
 protocol that encrypts traffic between your browser and the websites you visit.
-It's the protocol that secures your connection to the websites you use and makes
-sure that only you and the code running the websites can see your private data
-like passwords, credit card numbers, and cookies.</p>
+That protocol secures your connection to the websites you use and makes sure
+that only you and the code running the websites can see your private data like
+passwords, credit card numbers, and cookies.</p>
 
 <p>Newer versions of TLS are faster and harder to attack. Most browsers now
 negotiate <code>TLS 1.3</code> by default. The older <code>TLS 1.0</code> and
 <code>TLS 1.1</code> are extremely insecure. And <code>TLS 1.2</code> is slower
-and less secure (because of how many insecure options it supports).</p>
+and less secure through the many insecure option it supports (like cipher suites
+without forward secrecy).</p>
 
 <p>The home page of tlsversion.com shows whatever version your browser and this
 server settled on for that request. If you'd rather have it as data, fetch <a
