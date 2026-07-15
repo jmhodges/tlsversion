@@ -218,6 +218,11 @@ func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Se
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
+	// serveErr carries a fatal listener error (e.g. the port is already in
+	// use) from either goroutine. It is buffered for both senders so a losing
+	// sender never blocks forever after the winner triggers shutdown.
+	serveErr := make(chan error, 2)
+
 	log.Printf("Booting HTTPS on %s and HTTP on %s", *httpsAddr, *httpAddr)
 	go func() {
 		// Empty paths: certs come from TLSConfig's GetCertificate (the keypair
@@ -226,17 +231,27 @@ func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Se
 		// served forever, never seeing reloaded certs.
 		err := httpsSrv.ListenAndServeTLS("", "")
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatalf("https server error: %s", err)
+			serveErr <- fmt.Errorf("https server error: %w", err)
 		}
 	}()
 	go func() {
 		err := plaintextSrv.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http server error: %s", err)
+			serveErr <- fmt.Errorf("http server error: %w", err)
 		}
 	}()
 
-	<-stop
+	// Wait for either an operator-initiated stop (a signal) or a fatal
+	// listener error. A listener error must still drain the other server
+	// gracefully rather than calling log.Fatal (os.Exit), which would leave
+	// the healthy server's in-flight requests dropped mid-response.
+	var listenErr error
+	select {
+	case <-stop:
+	case listenErr = <-serveErr:
+		log.Printf("shutting down after %s", listenErr)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
@@ -256,6 +271,13 @@ func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Se
 	}()
 	wg.Wait()
 	cancel()
+
+	// Preserve the original failure signal to the process supervisor: a crash
+	// from a listener error should still exit non-zero, but only after both
+	// servers have drained.
+	if listenErr != nil {
+		os.Exit(1)
+	}
 }
 
 func makeTLSConfig(certPath, keyPath string) *tls.Config {
