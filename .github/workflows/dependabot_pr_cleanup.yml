@@ -1,0 +1,15 @@
+name: Dependabot PR cleanup
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions: {}
+
+jobs:
+  cleanup:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: jmhodges/dependabot-pr-merge-cleanup@589a337707a9d27fe66536f65af2c7d8806c21f9 # v1.0.2
