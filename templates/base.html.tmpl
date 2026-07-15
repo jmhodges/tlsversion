@@ -14,7 +14,7 @@
 
   --serif: Tahoma;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --measure: 34rem;
+  --measure: 39rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -49,7 +49,7 @@ main {
   padding: 4rem 1.5rem 1.5rem;
 }
 
-main > * + * { margin-top: 1.2rem; }
+main > * + * { margin-top: 1.65rem; }
 
 a {
   color: var(--link);
@@ -87,7 +87,7 @@ h1 {
 /* Section heads echo the home page's kicker: small-caps labels that
    sit below the h1 rather than competing with it. */
 h2 {
-  margin: 2.6rem 0 0;
+  margin: 3.5rem 0 0;
   font-size: 1.05rem;
   font-weight: 600;
   font-variant: small-caps;
@@ -115,6 +115,8 @@ h2[id] {
 @media (hover: hover) {
   h2[id]:hover .anchor-link { opacity: 1; }
 }
+
+.toc { margin-top: 2rem; }
 
 .toc ol {
   margin: 0;
