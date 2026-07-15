@@ -51,10 +51,29 @@ func main() {
 		TLSConfig: tlsConf,
 		Handler:   encryptedMux(domainForMatching, canonicalDomain),
 		Protocols: protos,
+		// Timeouts bound how long a single connection can tie up server
+		// resources, which protects against slow-client attacks (e.g.
+		// Slowloris) and stuck peers. This service only serves tiny
+		// responses, so the windows can be short. ReadTimeout also covers
+		// the TLS handshake for this server.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		// Cap request header size to blunt memory-exhaustion attempts. The
+		// default is 1MB; 64KB is plenty for the requests this service sees.
+		MaxHeaderBytes: 64 << 10,
 	}
 	plaintextSrv := &http.Server{
 		Addr:    *httpAddr,
 		Handler: plaintextMux(canonicalDomain),
+		// The plaintext server only issues redirects and healthchecks, so it
+		// can use the same conservative bounds as the HTTPS server.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
 	}
 
 	runServersWithGracefulShutdown(httpsSrv, plaintextSrv)
