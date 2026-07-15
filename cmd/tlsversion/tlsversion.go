@@ -18,11 +18,14 @@ import (
 	"time"
 
 	"github.com/jmhodges/tlsversion"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 )
 
 var (
 	httpsAddr = flag.String("httpsAddr", "localhost:10443", "address to boot the HTTPS server on")
 	httpAddr  = flag.String("httpAddr", "localhost:8080", "address to boot the HTTP server on")
+	http3Addr = flag.String("http3Addr", "localhost:10443", "UDP address to boot the HTTP/3 server on (empty disables HTTP/3)")
 	rawDomain = flag.String("canonicalDomain", "localhost:10443", "domain to use as base URL host when rendering redirects and templates (may include a port if necessary)")
 	certPath  = flag.String("cert", "./config/development_cert.pem", "file path to the TLS certificate to serve with")
 	keyPath   = flag.String("key", "./config/development_key.pem", "file path to the TLS key to serve with")
@@ -32,7 +35,7 @@ var (
 func main() {
 	flag.Parse()
 
-	if err := validateFlags(*httpsAddr, *httpAddr, *rawDomain, *certPath, *keyPath, *acmeURL); err != nil {
+	if err := validateFlags(*httpsAddr, *httpAddr, *http3Addr, *rawDomain, *certPath, *keyPath, *acmeURL); err != nil {
 		log.Fatal(err)
 	}
 
@@ -44,13 +47,25 @@ func main() {
 		log.Fatalf("failed to split host and port in canonicalDomain %#v: %s", canonicalDomain, err)
 	}
 
+	encHandler := encryptedMux(domainForMatching, canonicalDomain)
+	httpsHandler := encHandler
+	if *http3Addr != "" {
+		// Advertise the HTTP/3 endpoint on every TCP HTTPS response so
+		// browsers upgrade to QUIC on their next connection.
+		altSvc, err := altSvcValue(canonicalDomain)
+		if err != nil {
+			log.Fatalf("failed to build Alt-Svc header value from canonicalDomain %#v: %s", canonicalDomain, err)
+		}
+		httpsHandler = withAltSvc(altSvc, encHandler)
+	}
+
 	protos := &http.Protocols{}
 	protos.SetHTTP2(true)
 	protos.SetHTTP1(true)
 	httpsSrv := &http.Server{
 		Addr:      *httpsAddr,
 		TLSConfig: tlsConf,
-		Handler:   encryptedMux(domainForMatching, canonicalDomain),
+		Handler:   httpsHandler,
 		Protocols: protos,
 		// Timeouts bound how long a single connection can tie up server
 		// resources, which protects against slow-client attacks (e.g.
@@ -77,7 +92,54 @@ func main() {
 		MaxHeaderBytes:    64 << 10,
 	}
 
-	if err := runServersWithGracefulShutdown(httpsSrv, plaintextSrv); err != nil {
+	servers := []namedServer{
+		// Empty paths: certs come from TLSConfig's GetCertificate (the keypair
+		// reloader). Passing file paths here would make ServeTLS load a static
+		// copy into Certificates[0], which clients without SNI would then be
+		// served forever, never seeing reloaded certs.
+		{"https", *httpsAddr, func() error { return httpsSrv.ListenAndServeTLS("", "") }, httpsSrv.Shutdown},
+		{"http", *httpAddr, plaintextSrv.ListenAndServe, plaintextSrv.Shutdown},
+	}
+
+	if *http3Addr != "" {
+		h3srv := &http3.Server{
+			// ConfigureTLSConfig clones the config and sets the "h3" ALPN
+			// protocol. The permissive MinVersion/CipherSuites carry over
+			// harmlessly: QUIC always uses TLS 1.3, and quic-go enforces that
+			// on its own clone, so HTTP/3 clients always see "TLS 1.3".
+			TLSConfig: http3.ConfigureTLSConfig(tlsConf),
+			Handler:   encHandler,
+			// Mirror the TCP servers' bounds: MaxHeaderBytes caps the HEADERS
+			// frame, IdleTimeout drops idle HTTP/3 connections, and the QUIC
+			// timeouts below bound the handshake and transport-level idleness
+			// the same way ReadTimeout and IdleTimeout do for TCP.
+			MaxHeaderBytes: 64 << 10,
+			IdleTimeout:    120 * time.Second,
+			QUICConfig: &quic.Config{
+				HandshakeIdleTimeout: 10 * time.Second,
+				MaxIdleTimeout:       120 * time.Second,
+			},
+		}
+		// Bind the UDP socket here rather than using ListenAndServe so a bad
+		// address fails at boot, and because http3.Server.Shutdown documents a
+		// race when combined with ListenAndServe.
+		udpConn, err := net.ListenPacket("udp", *http3Addr)
+		if err != nil {
+			log.Fatalf("unable to listen on UDP address %#v for HTTP/3: %s", *http3Addr, err)
+		}
+		servers = append(servers, namedServer{
+			"http3", *http3Addr + " (UDP)",
+			func() error { return h3srv.Serve(udpConn) },
+			func(ctx context.Context) error {
+				err := h3srv.Shutdown(ctx)
+				// Shutdown doesn't close a caller-provided packet conn.
+				udpConn.Close()
+				return err
+			},
+		})
+	}
+
+	if err := runServersWithGracefulShutdown(servers); err != nil {
 		// The failures were already logged as they happened; the non-zero
 		// exit is the signal to the process supervisor.
 		os.Exit(1)
@@ -89,7 +151,7 @@ func main() {
 // service. It reports every problem it finds in one error (rather than failing
 // on the first) so the operator can fix them all in a single pass instead of
 // rebooting repeatedly to discover them one at a time.
-func validateFlags(httpsAddr, httpAddr, canonicalDomain, certPath, keyPath, acmeURL string) error {
+func validateFlags(httpsAddr, httpAddr, http3Addr, canonicalDomain, certPath, keyPath, acmeURL string) error {
 	var problems []string
 
 	for _, f := range []struct {
@@ -107,6 +169,15 @@ func validateFlags(httpsAddr, httpAddr, canonicalDomain, certPath, keyPath, acme
 		// which would otherwise fail only once a server tried to listen.
 		if _, _, err := net.SplitHostPort(f.value); err != nil {
 			problems = append(problems, fmt.Sprintf("-%s %#v is not a valid host:port address: %s", f.name, f.value, err))
+		}
+	}
+
+	// http3Addr is optional: empty means HTTP/3 is disabled (e.g. an
+	// environment where UDP can't reach the pods). When set it must be a
+	// host:port like the other listen addresses.
+	if http3Addr != "" {
+		if _, _, err := net.SplitHostPort(http3Addr); err != nil {
+			problems = append(problems, fmt.Sprintf("-http3Addr %#v is not a valid host:port address: %s", http3Addr, err))
 		}
 	}
 
@@ -137,6 +208,34 @@ func validateFlags(httpsAddr, httpAddr, canonicalDomain, certPath, keyPath, acme
 		return fmt.Errorf("invalid flag values:\n  %s", strings.Join(problems, "\n  "))
 	}
 	return nil
+}
+
+// altSvcValue builds the Alt-Svc header value (RFC 7838) that tells clients
+// this origin is also reachable over HTTP/3. The advertised port is the one
+// clients dial to reach the service — the port in canonicalDomain, or 443 when
+// it has none — not the local listen port, because in production a load
+// balancer maps 443 to the pod's listen port. ma is 30 days, matching common
+// practice for stable deployments.
+func altSvcValue(canonicalDomain string) (string, error) {
+	port := "443"
+	if strings.Contains(canonicalDomain, ":") {
+		_, p, err := net.SplitHostPort(canonicalDomain)
+		if err != nil {
+			return "", err
+		}
+		port = p
+	}
+	return fmt.Sprintf(`h3=":%s"; ma=2592000`, port), nil
+}
+
+// withAltSvc sets the Alt-Svc header on every response from h. It is only
+// wrapped around the TCP HTTPS handler: responses already arriving over
+// HTTP/3 don't need to advertise the upgrade.
+func withAltSvc(altSvc string, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Alt-Svc", altSvc)
+		h.ServeHTTP(w, r)
+	})
 }
 
 // hostForMatching returns the bare host (no port) from a canonical domain value
@@ -242,34 +341,35 @@ func plaintextMux(canonicalDomain string) http.Handler {
 	return mux
 }
 
-// runServersWithGracefulShutdown runs both servers until an OS signal arrives
-// or a listener fails, then drains in-flight requests on both before
+// namedServer is one server for runServersWithGracefulShutdown to run: a name
+// and address for log lines, a blocking listen func (expected to return
+// http.ErrServerClosed on a clean shutdown), and a graceful shutdown func.
+type namedServer struct {
+	name     string
+	addr     string
+	listen   func() error
+	shutdown func(context.Context) error
+}
+
+// runServersWithGracefulShutdown runs every server until an OS signal arrives
+// or a listener fails, then drains in-flight requests on all of them before
 // returning. Listener errors are logged as they are seen; the returned error
 // is non-nil if any server failed, so main can exit non-zero for the process
 // supervisor.
-func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Server) error {
+func runServersWithGracefulShutdown(servers []namedServer) error {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	servers := []struct {
-		name   string
-		srv    *http.Server
-		listen func() error
-	}{
-		// Empty paths: certs come from TLSConfig's GetCertificate (the keypair
-		// reloader). Passing file paths here would make ServeTLS load a static
-		// copy into Certificates[0], which clients without SNI would then be
-		// served forever, never seeing reloaded certs.
-		{"https", httpsSrv, func() error { return httpsSrv.ListenAndServeTLS("", "") }},
-		{"http", plaintextSrv, func() error { return plaintextSrv.ListenAndServe() }},
-	}
 
 	// serveErr carries fatal listener errors (e.g. the port is already in
 	// use). It is buffered for every sender so no sender blocks after the
 	// first error triggers shutdown.
 	serveErr := make(chan error, len(servers))
 
-	log.Printf("Booting HTTPS on %s and HTTP on %s", *httpsAddr, *httpAddr)
+	var bootMsg []string
+	for _, s := range servers {
+		bootMsg = append(bootMsg, fmt.Sprintf("%s on %s", s.name, s.addr))
+	}
+	log.Printf("Booting %s", strings.Join(bootMsg, ", "))
 	var serveWG sync.WaitGroup
 	for _, s := range servers {
 		serveWG.Go(func() {
@@ -307,7 +407,7 @@ func runServersWithGracefulShutdown(httpsSrv *http.Server, plaintextSrv *http.Se
 	var wg sync.WaitGroup
 	for _, s := range servers {
 		wg.Go(func() {
-			if err := s.srv.Shutdown(ctx); err != nil {
+			if err := s.shutdown(ctx); err != nil {
 				log.Printf("error shutting down %s: %s", strings.ToUpper(s.name), err)
 			}
 		})

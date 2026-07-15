@@ -43,6 +43,10 @@ spec:
               containerPort: 10443
             - name: http
               containerPort: 8080
+            # HTTP/3 (QUIC) shares the HTTPS port number but on UDP.
+            - name: http3
+              containerPort: 10443
+              protocol: UDP
           env:
             # Consumed by the Dockerfile ENTRYPOINT:
             #   -canonicalDomain=$TLSVERSION_DOMAIN
