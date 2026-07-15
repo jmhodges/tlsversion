@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -224,8 +225,15 @@ func TestPlaintextMux(t *testing.T) {
 	})
 }
 
+// testLogger returns the analytics logger to hand to encryptedMux in tests.
+// These tests are about the responses, not the log lines, so it throws them
+// away rather than cluttering the test output.
+func testLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
+
 func TestEncryptedMux(t *testing.T) {
-	h := encryptedMux("example.com", "example.com")
+	h := encryptedMux("example.com", "example.com", testLogger())
 
 	t.Run("missing TLS info on canonical host returns 500", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -343,7 +351,7 @@ func TestEncryptedMux(t *testing.T) {
 }
 
 func TestCrawlerFiles(t *testing.T) {
-	h := encryptedMux("example.com", "example.com")
+	h := encryptedMux("example.com", "example.com", testLogger())
 
 	// get fetches path over the mux as a TLS request on the canonical host and
 	// asserts the response is a 200 with the given Content-Type, returning the
@@ -458,7 +466,7 @@ func TestWithAltSvc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	h := withAltSvc(altSvc, encryptedMux("example.com", "example.com"))
+	h := withAltSvc(altSvc, encryptedMux("example.com", "example.com", testLogger()))
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "https://example.com/", nil)
@@ -488,7 +496,7 @@ func TestHTTP3EndToEnd(t *testing.T) {
 
 	h3srv := &http3.Server{
 		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{Certificates: []tls.Certificate{cert}}),
-		Handler:   encryptedMux("localhost", "localhost"),
+		Handler:   encryptedMux("localhost", "localhost", testLogger()),
 	}
 	udpConn, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
