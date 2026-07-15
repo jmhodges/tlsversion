@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
+      # Use the same Go version the release image is built with, so CI can't
+      # pass on a version the Docker build never sees.
+      - uses: ./.github/actions/setup-go-from-dockerfile
       - name: Check gofmt
         run: |
           unformatted=$(gofmt -l .)
