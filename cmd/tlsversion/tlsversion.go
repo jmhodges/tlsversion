@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -47,7 +48,14 @@ func main() {
 		log.Fatalf("failed to split host and port in canonicalDomain %#v: %s", canonicalDomain, err)
 	}
 
-	encHandler := encryptedMux(domainForMatching, canonicalDomain)
+	// The analytics log is its own logger, separate from the log.Printf lines
+	// about booting and shutting down, because the two streams want different
+	// homes: one line per request is the data about who uses this service and
+	// is meant to end up somewhere queryable, while the process lines are just
+	// operator noise. Point this at a different handler to send it elsewhere.
+	analyticsLogger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	encHandler := encryptedMux(domainForMatching, canonicalDomain, analyticsLogger)
 	httpsHandler := encHandler
 	if *http3Addr != "" {
 		// Advertise the HTTP/3 endpoint on every TCP HTTPS response so
@@ -253,10 +261,15 @@ func hostForMatching(canonicalDomain string) (string, error) {
 	return host, nil
 }
 
-func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
+// encryptedMux builds the handler for the HTTPS and HTTP/3 servers. The
+// analyticsLogger is only for the per-request lines about who's asking and what
+// they negotiated; it's a separate logger from the log.Printf lines about the
+// process itself so that stream can be pointed somewhere else on its own.
+func encryptedMux(domainForMatching, canonicalDomain string, analyticsLogger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
 	mux.HandleFunc("/v1/version.json", func(w http.ResponseWriter, r *http.Request) {
+		logTLSRequest(analyticsLogger, r, kindAPI)
 		w.Header().Set("Content-Type", "application/json")
 		// The TLS version is a property of the caller's own connection, so
 		// there's nothing here that's private to the origin. Let anyone fetch
@@ -273,6 +286,7 @@ func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 		w.Write(out)
 	})
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
+		logTLSRequest(analyticsLogger, r, kindPage)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := tlsversion.IndexData{Version: tls.VersionName(r.TLS.Version)}
 		if err := tlsversion.Index.Execute(w, data); err != nil {
@@ -347,6 +361,40 @@ func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 
 type tlsVersionResponse struct {
 	Version string `json:"version"`
+}
+
+// requestKind splits the analytics log into the two audiences this service has:
+// programs calling the JSON API, and people loading a page in a browser.
+// Handlers name their own kind rather than having it derived from the request
+// path so that queries over the log keep working when the set of paths grows.
+// It's its own type so an arbitrary string can't be logged as a kind: the
+// values are a closed set that queries group by, not free text.
+type requestKind string
+
+const (
+	kindAPI  requestKind = "api"
+	kindPage requestKind = "page"
+)
+
+// logTLSRequest records a request to one of the endpoints that report a client's
+// TLS version. The negotiated version is the whole point of the service, and
+// the User-Agent, Origin, and Referer headers tell us which clients are still
+// on old versions and which sites are sending them here. The message stays
+// constant and the interesting values are attributes, because this log is meant
+// to be queried as columns rather than read as prose.
+//
+// Callers must only use it where r.TLS is guaranteed non-nil, which the
+// expectTLS wrapper enforces for the HTTPS mux.
+func logTLSRequest(logger *slog.Logger, r *http.Request, kind requestKind) {
+	logger.InfoContext(r.Context(), "request",
+		"kind", string(kind),
+		"path", r.URL.Path,
+		"proto", r.Proto,
+		"tls_version", tls.VersionName(r.TLS.Version),
+		"user_agent", r.UserAgent(),
+		"origin", r.Header.Get("Origin"),
+		"referer", r.Referer(),
+	)
 }
 
 func plaintextMux(canonicalDomain string) http.Handler {
