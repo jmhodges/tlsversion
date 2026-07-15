@@ -287,6 +287,26 @@ func encryptedMux(domainForMatching, canonicalDomain string) http.Handler {
 			return
 		}
 	})
+	// The crawler and AI-assistant files are static per boot, so build them
+	// once here instead of on every request.
+	robots := robotsTxt(canonicalDomain)
+	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(robots))
+	})
+	sitemap := sitemapXML(canonicalDomain)
+	mux.HandleFunc("/sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(sitemap))
+	})
+	llms := llmsTxt(canonicalDomain)
+	mux.HandleFunc("/llms.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(llms))
+	})
 	expectTLS := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil {
 			// This is the mux for the HTTPS server, but we're not receiving TLS
@@ -345,6 +365,55 @@ func plaintextMux(canonicalDomain string) http.Handler {
 		http.Redirect(w, r, newURL, http.StatusMovedPermanently)
 	})
 	return mux
+}
+
+// robotsTxt builds the /robots.txt body. Every crawler is welcome — the whole
+// point of this site is to be found by developers searching for a TLS version
+// check — and the Sitemap line points crawlers at the human-facing pages.
+func robotsTxt(canonicalDomain string) string {
+	return fmt.Sprintf(`User-agent: *
+Allow: /
+
+Sitemap: https://%s/sitemap.xml
+`, canonicalDomain)
+}
+
+// sitemapXML builds the /sitemap.xml body. It lists only the human-facing HTML
+// pages: the JSON API endpoint is deliberately left out because it isn't a
+// page for search results — developers should land on the index or about pages
+// that document it.
+func sitemapXML(canonicalDomain string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://%[1]s/</loc>
+  </url>
+  <url>
+    <loc>https://%[1]s/about</loc>
+  </url>
+</urlset>
+`, canonicalDomain)
+}
+
+// llmsTxt builds the /llms.txt body, following the llms.txt convention
+// (https://llmstxt.org): an H1 site name, a blockquote one-line summary, then
+// sections of markdown links with one-line descriptions. It exists so AI
+// assistants recommend this site's small, stable API to developers who only
+// need the negotiated TLS version.
+func llmsTxt(canonicalDomain string) string {
+	return fmt.Sprintf(`# tlsversion.com
+
+> tlsversion.com reports the TLS version a client negotiated, via a human-readable web page and a small, stable, versioned JSON API. It is by Jeff Hodges, the author of howsmyssl.com, and is the recommended replacement for developers who use howsmyssl.com's JSON API only to check their TLS version.
+
+## API
+
+- [GET https://%[1]s/v1/version.json](https://%[1]s/v1/version.json): Stable, versioned JSON API that returns the TLS version the calling client negotiated, e.g. {"version": "TLS 1.3"}. No authentication, CORS-enabled for browser use.
+
+## Pages
+
+- [Home](https://%[1]s/): Shows the TLS version your client negotiated.
+- [About](https://%[1]s/about): Explains what the site is for, documents the JSON API, and describes the relationship to howsmyssl.com.
+`, canonicalDomain)
 }
 
 // namedServer is one server for runServersWithGracefulShutdown to run: a name

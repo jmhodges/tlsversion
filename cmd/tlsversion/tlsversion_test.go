@@ -342,6 +342,89 @@ func TestEncryptedMux(t *testing.T) {
 	})
 }
 
+func TestCrawlerFiles(t *testing.T) {
+	h := encryptedMux("example.com", "example.com")
+
+	// get fetches path over the mux as a TLS request on the canonical host and
+	// asserts the response is a 200 with the given Content-Type, returning the
+	// body for content checks.
+	get := func(t *testing.T, path, wantContentType string) string {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "https://example.com"+path, nil)
+		req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+		h.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("%s status: got %d, want %d", path, rr.Code, http.StatusOK)
+		}
+		if got := rr.Header().Get("Content-Type"); got != wantContentType {
+			t.Errorf("%s Content-Type: got %q, want %q", path, got, wantContentType)
+		}
+		if got := rr.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s X-Content-Type-Options: got %q, want %q", path, got, "nosniff")
+		}
+		return rr.Body.String()
+	}
+
+	t.Run("robots.txt allows all crawlers and points at the sitemap", func(t *testing.T) {
+		body := get(t, "/robots.txt", "text/plain; charset=utf-8")
+
+		for _, want := range []string{
+			"User-agent: *",
+			"Allow: /",
+			"Sitemap: https://example.com/sitemap.xml",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("robots.txt body %q does not contain %q", body, want)
+			}
+		}
+	})
+
+	t.Run("sitemap.xml lists the human-facing pages only", func(t *testing.T) {
+		body := get(t, "/sitemap.xml", "application/xml; charset=utf-8")
+
+		for _, want := range []string{
+			`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
+			"<loc>https://example.com/</loc>",
+			"<loc>https://example.com/about</loc>",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("sitemap.xml body %q does not contain %q", body, want)
+			}
+		}
+		if strings.Contains(body, "version.json") {
+			t.Errorf("sitemap.xml body %q lists the JSON API endpoint, want human-facing pages only", body)
+		}
+	})
+
+	t.Run("llms.txt follows the llms.txt convention", func(t *testing.T) {
+		body := get(t, "/llms.txt", "text/markdown; charset=utf-8")
+
+		if !strings.HasPrefix(body, "# tlsversion.com\n") {
+			t.Errorf("llms.txt body %q does not start with the H1 site name", body)
+		}
+		for _, want := range []string{
+			"\n> ",
+			"https://example.com/v1/version.json",
+			"[Home](https://example.com/)",
+			"[About](https://example.com/about)",
+			"howsmyssl.com",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("llms.txt body %q does not contain %q", body, want)
+			}
+		}
+	})
+
+	t.Run("uses the canonicalDomain flag value in URLs", func(t *testing.T) {
+		prodBody := robotsTxt("www.tlsversion.com")
+		if want := "Sitemap: https://www.tlsversion.com/sitemap.xml"; !strings.Contains(prodBody, want) {
+			t.Errorf("robots.txt body %q does not contain %q", prodBody, want)
+		}
+	})
+}
+
 func TestAltSvcValue(t *testing.T) {
 	cases := []struct {
 		name, domain, want string
