@@ -95,6 +95,27 @@ h2 {
   color: var(--muted);
 }
 
+h2[id] {
+  position: relative;
+  scroll-margin-top: 1rem;
+}
+
+.anchor-link {
+  position: absolute;
+  right: 100%;
+  padding-right: 0.35em;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.anchor-link:focus-visible { opacity: 1; }
+
+@media (hover: hover) {
+  h2[id]:hover .anchor-link { opacity: 1; }
+}
+
 .toc ol {
   margin: 0;
   padding-left: 1.5rem;
