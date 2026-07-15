@@ -5,9 +5,9 @@ FROM golang:1.26.4@sha256:87a41d2539e5671777734e91f467499ed5eafb1fb1f77221dff274
 
 WORKDIR /src
 
-# Cache module downloads separately from the build. There are currently no
-# third-party dependencies, but this keeps rebuilds fast if any are added.
-COPY go.mod ./
+# Cache module downloads separately from the build so rebuilds skip
+# re-downloading dependencies when only source files change.
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
@@ -30,14 +30,15 @@ COPY --from=build /out/tlsversion /usr/local/bin/tlsversion
 
 USER app
 
-# HTTPS and HTTP.
-EXPOSE 10443 8080
+# HTTPS (TCP), HTTP (TCP), and HTTP/3 (UDP).
+EXPOSE 10443 8080 10443/udp
 
 # TLS cert/key are mounted at runtime (e.g. a Kubernetes secret); they are not
 # baked into the image. -canonicalDomain and -acmeRedirect come from the environment.
 ENTRYPOINT ["/bin/sh", "-c", "exec tlsversion \
     -httpsAddr=:10443 \
     -httpAddr=:8080 \
+    -http3Addr=:10443 \
     -cert=/secrets/tlsversion-tls/tls.crt \
     -key=/secrets/tlsversion-tls/tls.key \
     -canonicalDomain=$TLSVERSION_DOMAIN \
