@@ -38,15 +38,17 @@ spec:
         - name: tlsversion
           image: __IMAGE__
           imagePullPolicy: IfNotPresent
+          # HTTP/3 (QUIC) is also served, on UDP 10443, but is deliberately
+          # not declared here: client-side `kubectl apply` (what CI runs)
+          # merges containerPort entries on port number alone, so a 10443/TCP
+          # entry and a 10443/UDP entry collapse into one mangled port. The
+          # declarations are informational anyway — the Services below target
+          # numeric ports, so traffic flows regardless.
           ports:
             - name: https
               containerPort: 10443
             - name: http
               containerPort: 8080
-            # HTTP/3 (QUIC) shares the HTTPS port number but on UDP.
-            - name: http3
-              containerPort: 10443
-              protocol: UDP
           env:
             # Consumed by the Dockerfile ENTRYPOINT:
             #   -canonicalDomain=$TLSVERSION_DOMAIN
@@ -126,13 +128,17 @@ spec:
   loadBalancerIP: 34.42.103.207
   selector:
     app: tlsversion
+  # Numeric targetPorts on purpose: a named targetPort resolves against the
+  # pod's declared ports by name AND protocol, and the pod template can't
+  # reliably declare the 10443/TCP + 10443/UDP pair (see the ports comment on
+  # the Deployment). Numbers match no matter what the pod declares.
   ports:
     - name: https
       port: 443
-      targetPort: https
+      targetPort: 10443
     - name: http
       port: 80
-      targetPort: http
+      targetPort: 8080
 ---
 # HTTP/3 (QUIC): UDP 443 to the pods' HTTP/3 listener, on the same static IP
 # as the TCP Service above. See that Service's comment for why this is split
@@ -153,7 +159,7 @@ spec:
     - name: http3
       port: 443
       protocol: UDP
-      targetPort: http3
+      targetPort: 10443
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
