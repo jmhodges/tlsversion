@@ -95,10 +95,25 @@ spec:
           secret:
             secretName: tlsversion-tls
 ---
+# TCP (HTTPS + HTTP) and UDP (HTTP/3) are two separate Services on purpose,
+# both claiming the same static IP. Two reasons, learned the hard way:
+#
+#  1. GKE's default external network load balancer (the target-pool kind)
+#     refuses mixed-protocol Services: the service controller loops on
+#     "mixed protocol is not supported for LoadBalancer" and never provisions
+#     the UDP forwarding rule. GCP is happy to attach one TCP and one UDP
+#     forwarding rule to the same regional static IP, so one Service per
+#     protocol gets us both.
+#
+#  2. Client-side `kubectl apply` (what CI runs) merges Service ports on
+#     `port` alone, not port+protocol, so a 443/TCP entry and a 443/UDP entry
+#     in one Service silently collapse into a single port. Keeping the
+#     protocols in separate Services means no Service ever has two entries
+#     with the same port number.
 apiVersion: v1
 kind: Service
 metadata:
-  name: tlsversion
+  name: tlsversion-tcp
   namespace: prod
   labels:
     app: tlsversion
@@ -118,7 +133,23 @@ spec:
     - name: http
       port: 80
       targetPort: http
-    # HTTP/3 (QUIC): UDP 443 to the pods' HTTP/3 listener.
+---
+# HTTP/3 (QUIC): UDP 443 to the pods' HTTP/3 listener, on the same static IP
+# as the TCP Service above. See that Service's comment for why this is split
+# out rather than being a third port there.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tlsversion-udp
+  namespace: prod
+  labels:
+    app: tlsversion
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 34.42.103.207
+  selector:
+    app: tlsversion
+  ports:
     - name: http3
       port: 443
       protocol: UDP
