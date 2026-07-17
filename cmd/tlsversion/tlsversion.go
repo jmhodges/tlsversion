@@ -268,6 +268,16 @@ func hostForMatching(canonicalDomain string) (string, error) {
 func encryptedMux(domainForMatching, canonicalDomain string, analyticsLogger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/.well-known/acme-challenge/", acmeRedirect(*acmeURL))
+	// The plaintext server's /healthcheck isn't reachable over this listener, so
+	// serve one here too. This is the only lightweight, stable-200 endpoint on
+	// the encrypted listeners, which lets an external probe force HTTP/2 (over
+	// TCP) or HTTP/3 (over QUIC) and assert the negotiated protocol without
+	// depending on the redirect app's HTML.
+	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
 	mux.HandleFunc("/v1/version.json", func(w http.ResponseWriter, r *http.Request) {
 		logTLSRequest(analyticsLogger, r, kindAPI)
 		w.Header().Set("Content-Type", "application/json")

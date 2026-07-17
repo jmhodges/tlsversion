@@ -260,6 +260,20 @@ func TestEncryptedMux(t *testing.T) {
 		}
 	})
 
+	t.Run("healthcheck returns ok over TLS", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "https://example.com/healthcheck", nil)
+		req.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+		h.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("status: got %d, want %d", rr.Code, http.StatusOK)
+		}
+		if got := rr.Body.String(); got != "ok" {
+			t.Errorf("body: got %q, want %q", got, "ok")
+		}
+	})
+
 	t.Run("index page sets nosniff", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "https://example.com/", nil)
