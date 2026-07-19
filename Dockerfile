@@ -22,7 +22,7 @@ RUN go build \
 # Debian 13 slim with ca-certificates already baked in (rather than distroless
 # static) so the shell can expand the environment variables passed to the
 # command below.
-FROM cacertsfriend/ca-certs-images:debian-13-slim@sha256:502c35c01ac42b442156ce8a99db95801bd57ca5d8d9e43e5404f080c6dc0247
+FROM cacertsfriend/ca-certs-images:debian-13-slim@sha256:2e5b060f969b250fef7db010baf532573ada17edede6c2dfd6140d0e00a83aaf
 
 RUN useradd --uid 10001 --no-create-home app
 
