@@ -40,6 +40,12 @@ object like this:</p>
     "version": "TLS 1.3"
 }</pre>
 
+<p>Here's how you might fetch it from JavaScript:</p>
+
+<pre>const res = await fetch("https://tlsversion.com/v1/version.json");
+const data = await res.json();
+console.log(data.version); // "TLS 1.3"</pre>
+
 <h2 id="howsmyssl"><a class="anchor-link" href="#howsmyssl" aria-label="Link to Relationship to How&rsquo;s My SSL?">#</a>Relationship to How&rsquo;s My SSL?</h2>
 
 <p>Tlsversion.com is the younger sibling to <a
