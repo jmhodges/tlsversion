@@ -53,7 +53,7 @@ func main() {
 	// homes: one line per request is the data about who uses this service and
 	// is meant to end up somewhere queryable, while the process lines are just
 	// operator noise. Point this at a different handler to send it elsewhere.
-	analyticsLogger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	analyticsLogger := slog.New(newAnalyticsHandler(os.Stdout))
 
 	encHandler := encryptedMux(domainForMatching, canonicalDomain, analyticsLogger)
 	httpsHandler := encHandler
