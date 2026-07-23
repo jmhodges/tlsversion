@@ -120,19 +120,31 @@ else
 fi
 echo
 
-cat <<EOF
-==> Log Analytics (run in the console: Logging > Log Analytics, or via the
-    linked BigQuery dataset with: bq query --use_legacy_sql=false '<sql>')
+# The linked BigQuery dataset's name is the bucket's link_id: the bucket name
+# with dashes turned into underscores (tlsversion-analytics ->
+# tlsversion_analytics).
+BQ_DATASET="${BUCKET//-/_}"
 
-    SELECT timestamp,
-           json_payload.tls_version,
-           json_payload.kind,
-           json_payload.proto
+cat <<EOF
+==> Log Analytics — read the same rows back via the linked BigQuery dataset.
+    json_payload columns are JSON-typed, so both SELECT and WHERE need
+    JSON_VALUE(), and \`proto\` is a reserved word so its alias is backticked.
+    This command works verbatim (bq needs --location for linked datasets):
+
+bq query --location=$LOCATION --use_legacy_sql=false '
+SELECT timestamp,
+       JSON_VALUE(json_payload.tls_version) AS tls_version,
+       JSON_VALUE(json_payload.kind) AS kind,
+       JSON_VALUE(json_payload.proto) AS \`proto\`
+FROM \`$PROJECT.$BQ_DATASET._AllLogs\`
+WHERE JSON_VALUE(json_payload.message) = "request"
+  AND JSON_VALUE(json_payload.user_agent) = "$UA"
+ORDER BY timestamp DESC
+LIMIT 20'
+
+    The same SQL works in the console (Logging > Log Analytics) with the
+    console's view path in the FROM clause instead:
     FROM \`$PROJECT.$LOCATION.$BUCKET._AllLogs\`
-    WHERE json_payload.message = "request"
-      AND json_payload.user_agent = "$UA"
-    ORDER BY timestamp DESC
-    LIMIT 20
 
 Troubleshooting empty pod logs (step 2):
   * kubectl logs deploy/tlsversion reads only ONE of the 2 replicas — use
