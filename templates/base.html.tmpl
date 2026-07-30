@@ -55,16 +55,13 @@ html {
 }
 
 /* The KOReader trick: the page background is a gradient, and the body is
-   a paper card narrower than the viewport that hangs from the top edge,
-   so the gradient frames it on the sides and below. */
+   a paper card narrower than the viewport, so the gradient frames it on
+   every side. */
 body {
-  margin: 0 auto 1.5rem;
+  margin: 1.5rem auto;
   max-width: calc(var(--measure) + 2.5rem);
   background: var(--paper);
   border: 10px solid var(--rule);
-  border-top: none;
-  /* All four corners round: the top pair curls the card's shoulders away
-     from the viewport edge so the gradient peeks through up there too. */
   border-radius: 2em;
   color: var(--ink);
   font: 1.25rem/1.65 var(--serif);
