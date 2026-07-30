@@ -62,6 +62,9 @@ body {
   max-width: calc(var(--measure) + 2.5rem);
   background: var(--paper);
   border: 10px solid var(--rule);
+  /* No top border: the card reads as a sheet sliding down into the page,
+     even with the gradient showing above it. */
+  border-top: none;
   border-radius: 2em;
   color: var(--ink);
   font: 1.25rem/1.65 var(--serif);
