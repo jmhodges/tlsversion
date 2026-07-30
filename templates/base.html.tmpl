@@ -20,8 +20,8 @@
      a warm grey into a cool teal, top-left to bottom-right. It echoes
      the sage of --link without competing with the paper. */
   --frame-warm: #e2eedd;
-  --frame-mid:  #edeae3;
-  --frame-cool: #d8ebe4;
+  --frame-mid:  #e6eedd;
+  --frame-cool: #c7ecd0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,8 +33,8 @@
     --link:  #7cb3a1;   /* lifted sage — forest goes muddy on dark paper */
 
     --frame-warm: #1e2619;
-    --frame-mid:  #1e1c17;
-    --frame-cool: #17241f;
+    --frame-mid:  #1c2218;
+    --frame-cool: #16241b;
   }
 }
 
@@ -48,9 +48,11 @@ html {
      below the card with a visible seam. */
   min-height: 100%;
   background: var(--frame-mid);
-  background: linear-gradient(135deg,
-    var(--frame-warm) 0%,
-    var(--frame-mid) 35%,
+  /* Radial rather than linear so the frame is symmetric: both bottom
+     corners land on the same green. */
+  background: radial-gradient(ellipse at 50% 30%,
+    var(--frame-mid) 0%,
+    var(--frame-warm) 50%,
     var(--frame-cool) 100%);
 }
 
