@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tlsversion",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/tlsversion"],
+      "port": 10443,
+      "url": "https://localhost:10443"
+    }
+  ]
+}
