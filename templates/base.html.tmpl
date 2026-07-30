@@ -26,15 +26,20 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #16140f;
+    /* Dark mode inverts the light mode's glow into a hole: the frame is
+       brightest at the viewport edges (a lit rim of moss) and falls to
+       near-black behind the card, so the page reads as looking down into
+       a burrow with the card suspended in it. Every neutral leans green
+       (hues 94–122°) so the frame reads as forest, not warm-vs-green mud. */
+    --paper: #131710;
     --ink:   #ece3d3;
-    --muted: #b0a692;
-    --rule:  #2f2a21;
-    --link:  #7cb3a1;   /* lifted sage — forest goes muddy on dark paper */
+    --muted: #a3a88c;
+    --rule:  #1c2719;
+    --link:  #b87a20;   /* #946219 ochre lifted to 5:1 — the raw value misses AA */
 
-    --frame-warm: #1e2619;
-    --frame-mid:  #1c2218;
-    --frame-cool: #16241b;
+    --frame-warm: #182b15;
+    --frame-mid:  #0d130a;
+    --frame-cool: #2b4a28;
   }
 }
 
