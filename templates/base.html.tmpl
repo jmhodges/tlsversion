@@ -20,21 +20,26 @@
      a warm grey into a cool teal, top-left to bottom-right. It echoes
      the sage of --link without competing with the paper. */
   --frame-warm: #e2eedd;
-  --frame-mid:  #edeae3;
-  --frame-cool: #d8ebe4;
+  --frame-mid:  #e6eedd;
+  --frame-cool: #c7ecd0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #16140f;
+    /* Dark mode inverts the light mode's glow into a hole: the frame is
+       brightest at the viewport edges (a lit rim of moss) and falls to
+       near-black behind the card, so the page reads as looking down into
+       a burrow with the card suspended in it. Every neutral leans green
+       (hues 94–122°) so the frame reads as forest, not warm-vs-green mud. */
+    --paper: #131710;
     --ink:   #ece3d3;
-    --muted: #b0a692;
-    --rule:  #2f2a21;
-    --link:  #7cb3a1;   /* lifted sage — forest goes muddy on dark paper */
+    --muted: #a3a88c;
+    --rule:  #2e4227;
+    --link:  #b87a20;   /* #946219 ochre lifted to 5:1 — the raw value misses AA */
 
-    --frame-warm: #1e2619;
-    --frame-mid:  #1e1c17;
-    --frame-cool: #17241f;
+    --frame-warm: #182b15;
+    --frame-mid:  #131710;   /* matches --paper: the floor of the hole */
+    --frame-cool: #2b4a28;
   }
 }
 
@@ -48,10 +53,29 @@ html {
      below the card with a visible seam. */
   min-height: 100%;
   background: var(--frame-mid);
-  background: linear-gradient(135deg,
-    var(--frame-warm) 0%,
-    var(--frame-mid) 35%,
+  /* Radial rather than linear so the frame is symmetric: both bottom
+     corners land on the same green. */
+  background: radial-gradient(ellipse at 50% 30%,
+    var(--frame-mid) 0%,
+    var(--frame-warm) 50%,
     var(--frame-cool) 100%);
+}
+
+/* In dark mode the card is not an object in the hole — it IS the floor.
+   The center of the gradient is the paper color itself and stays that way
+   past the card's edges, so wall meets floor with no seam; the moss walls
+   only rise at the periphery. The card border vanishes with it (--rule
+   still tints code blocks and hairlines inside the card). */
+@media (prefers-color-scheme: dark) {
+  html {
+    background: var(--paper);
+    background: radial-gradient(ellipse at 50% 30%,
+      var(--frame-mid) 0%,
+      var(--frame-mid) 45%,
+      var(--frame-warm) 72%,
+      var(--frame-cool) 100%);
+  }
+  body { border-color: transparent; }
 }
 
 /* The KOReader trick: the page background is a gradient, and the body is
