@@ -38,7 +38,7 @@
     --link:  #b87a20;   /* #946219 ochre lifted to 5:1 — the raw value misses AA */
 
     --frame-warm: #182b15;
-    --frame-mid:  #0d130a;
+    --frame-mid:  #131710;   /* matches --paper: the floor of the hole */
     --frame-cool: #2b4a28;
   }
 }
@@ -59,6 +59,23 @@ html {
     var(--frame-mid) 0%,
     var(--frame-warm) 50%,
     var(--frame-cool) 100%);
+}
+
+/* In dark mode the card is not an object in the hole — it IS the floor.
+   The center of the gradient is the paper color itself and stays that way
+   past the card's edges, so wall meets floor with no seam; the moss walls
+   only rise at the periphery. The card border vanishes with it (--rule
+   still tints code blocks and hairlines inside the card). */
+@media (prefers-color-scheme: dark) {
+  html {
+    background: var(--paper);
+    background: radial-gradient(ellipse at 50% 30%,
+      var(--frame-mid) 0%,
+      var(--frame-mid) 45%,
+      var(--frame-warm) 72%,
+      var(--frame-cool) 100%);
+  }
+  body { border-color: transparent; }
 }
 
 /* The KOReader trick: the page background is a gradient, and the body is
