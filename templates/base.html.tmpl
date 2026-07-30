@@ -15,6 +15,13 @@
   --serif: Tahoma;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --measure: 39rem;
+
+  /* Gradient frame behind the paper card: pale sage sweeping through
+     a warm grey into a cool teal, top-left to bottom-right. It echoes
+     the sage of --link without competing with the paper. */
+  --frame-warm: #e2eedd;
+  --frame-mid:  #edeae3;
+  --frame-cool: #d8ebe4;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,6 +31,10 @@
     --muted: #b0a692;
     --rule:  #2f2a21;
     --link:  #7cb3a1;   /* lifted sage — forest goes muddy on dark paper */
+
+    --frame-warm: #1e2619;
+    --frame-mid:  #1e1c17;
+    --frame-cool: #17241f;
   }
 }
 
@@ -31,11 +42,30 @@
 *::before,
 *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Without a viewport-filling box, short pages would repeat the gradient
+     below the card with a visible seam. */
+  min-height: 100%;
+  background: var(--frame-mid);
+  background: linear-gradient(135deg,
+    var(--frame-warm) 0%,
+    var(--frame-mid) 35%,
+    var(--frame-cool) 100%);
+}
 
+/* The KOReader trick: the page background is a gradient, and the body is
+   a paper card narrower than the viewport that hangs from the top edge,
+   so the gradient frames it on the sides and below. */
 body {
-  margin: 0;
+  margin: 0 auto 1.5rem;
+  max-width: calc(var(--measure) + 2.5rem);
   background: var(--paper);
+  border: 10px solid var(--rule);
+  border-top: none;
+  /* All four corners round: the top pair curls the card's shoulders away
+     from the viewport edge so the gradient peeks through up there too. */
+  border-radius: 2em;
   color: var(--ink);
   font: 1.25rem/1.65 var(--serif);
   -webkit-font-smoothing: antialiased;
